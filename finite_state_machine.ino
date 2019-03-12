@@ -1,7 +1,11 @@
+////////////////////////////////////////////////////////////////////
+
 #include "encoders.h"
 #include "pid.h"
 #include "line_sensors.h"
 #include "kinematics.h"
+
+////////////////////////////////////////////////////////////////////
 
 #define LOOP_DELAY 100
 #define L_PWM_PIN 10
@@ -25,31 +29,37 @@
 
 ////////////////////////// GLOBAL VARIABLES //////////////////////
 
-int STATE;
+int STATE; //state tracker
+
 int number_of_buzzes;
 int number_of_line_buzzes;
 
+
+/* PID controller information see pid.h*/
 float Kp_pose_left = 0.05; //Proportional gain for position controller
 float Kd_pose_left = 0.06; //Derivative gain for position controller
 float Ki_pose_left = 0.0; //Integral gain for position controller
 PID leftPose(Kp_pose_left, Kd_pose_left, Ki_pose_left); // controller for left wheel position, count_e1
-
 float Kp_pose_right = 0.085; //Proportional gain for position controller
 float Kd_pose_right = 0.06; //Derivative gain for position controller
 float Ki_pose_right = 0.0; //Integral gain for position controller
 PID rightPose(Kp_pose_right, Kd_pose_right, Ki_pose_right); // controller for right wheel position, count_e0
 
+
+/*Line sensor integration     see line_sensors.h*/
 Line_Sensor lineLeft(LINE_LEFT_PIN); //Create a line sensor object for the left sensor
 Line_Sensor lineCentre(LINE_CENTRE_PIN); //Create a line sensor object for the centre sensor
 Line_Sensor lineRight(LINE_RIGHT_PIN); //Create a line sensor object for the right sensor
 
+/* Kinematics integration   see kinematics.h*/
 Kinematics kinematics_l;
 Kinematics kinematics_r;
 
 
 ///////////////////////////////////////////////////////////////////
 
-void setup() {
+void setup() { //runs once at start
+  
   //Assign motor pins and set direction
   pinMode(L_PWM_PIN, OUTPUT);
   pinMode(L_DIR_PIN, OUTPUT);
@@ -65,14 +75,15 @@ void setup() {
   setupEncoder1();
 
   //initialise the serial communication
-  
   Serial.begin( 9600 );
-  Serial.println("***RESET***");
+  Serial.println("***RESET***"); //for debugging purposes
 
   //set initial state, before robot operation
   STATE = STATE_INITIAL;
 
 }
+
+//////////////////////////////////////////////////////////////////////////
 
 void loop() {
   
@@ -80,33 +91,32 @@ void loop() {
   switch(STATE) {
     
     case STATE_INITIAL: // state 0
-      initialisingBeeps();
+      initialisingBeeps(); //beep 5 times
       break;
       
     case STATE_DRIVE_FORWARDS: // state 1
-      driveForwards();
+      driveForwards();  //drive straight until line detected - PID tuned for straight line
       break;
       
     case STATE_FOUND_LINE: // state 2
-      drive_distance(0,0,200,200);
-      foundLineBeeps();
+      drive_distance(0,0,200,200); // upon detecting line set wheel speed to 0 on both
+                                   //, arbitrary location target
+      foundLineBeeps(); //indicate line detection by beeping twice
       break;
       
     case STATE_FOLLOW_LINE:  // state 3
-      lineFollow();
+      lineFollow(); // use bangbang controller to follow line 
       break;
 
     case STATE_END_LINE: // state 4
-      drive_distance(0,0,200,200);
-      longBeep();
-      Serial.println("Case 4!");
-      //wait for 5 seconds
-
+      drive_distance(0,0,200,200); //set wheel speed to 0 on both, arbitrary location target
+      longBeep(); //beep 3 times
+     
     case STATE_CORRECT_HEADING: // state 5
-      drive_distance(20,20,0,0);
-      Serial.println("Case 5!");
-      
+      drive_distance(20,20,0,0); //return to home
+            
     default:
+    //if state 6
       Serial.println("System error, unknown state!");
       break;
   }
@@ -140,12 +150,13 @@ void play_tone(int volume, int duration) {
 
 void driveForwards() {
   
-  float target = -5000;
+  float target = -5000; //arbitrary large enough value to drive over the line
   
   float output_left = leftPose.update(target, count_e1); //
   /*Serial.print("Left wheel output is: ");
   Serial.println(output_left);*/
   delay(LOOP_DELAY);
+  
   float output_right = rightPose.update(target, count_e0);
   /*Serial.print("Right wheel output is: ");
   Serial.println(output_right);*/
@@ -157,12 +168,11 @@ void driveForwards() {
   int centre = centreSensorCheck();
 
   if (left == 1 || right == 1 ||centre == 1) {
-    Serial.println("found line!");
+    //Serial output for debugging if required 
+    //Serial.println("found line!");
     STATE++;
   }
 
-  Serial.println("left: ");
-  Serial.println(left);
 }
 
 ///////////////////////////////////////////////// STATE 2 - done! /////////////////////////////
@@ -191,29 +201,41 @@ void lineFollow(){
   
 }
 
-void BangBang (int left, int right, int centre) {
 
-  float x_pos = kine_track_x();
-  Serial.println("X_pos: ");
-  Serial.println(x_pos);
+
+void BangBang (int left, int right, int centre) {
   
-  if ( left == 1 && right == 1 && centre == 1) {
-     //Serial.println("line detected");
+  /* bang bang controller implementation
+     if centre line sensor is on the line, robot drives forward
+     if left line sensor is on the line, robot rotates left 
+     if right line sensor is on the line, robot rotates right
+  */
+
+  float x_pos = kine_track_x(); //track global x-position 
+
+  if ( centre == 1) {
+    
      drive_distance(20,20,x_pos-1,x_pos-1);
      
-  } else if (left == 1 && right == 0) {
-    //stop
-    drive_distance(0,0, x_pos, x_pos);
-    rotate_left();
-    //turn left
+  } else if (left == 1 ) {
     
-  } else if (right == 1 && left == 0 ){
-    //stop
+    //remain stationary... 
+    drive_distance(0,0, x_pos, x_pos);
+    //... and turn left
+    rotate_left();
+    
+    
+  } else if (right == 1 ){
+    
+    //remain stationary...
     drive_distance(0,0,x_pos,x_pos);
-    //turn right
+    //... and turn right
     rotate_right();
     
   } else if (right == 0 && left == 0 && centre == 0) {
+    
+    //if all sensors are 0, the end of the line has been reached
+    //go to next state
     STATE++;
   }
    
@@ -284,6 +306,7 @@ int leftSensorCheck(){
   int line_find_left = lineLeft.line_detection(calib_lineLeft); 
   return line_find_left;
 }
+
 int rightSensorCheck(){
   int output_lineRight = lineRight.read_raw();
   int calib_lineRight = lineRight.calibrate(output_lineRight);
@@ -291,6 +314,7 @@ int rightSensorCheck(){
   return line_find_right;
   
 }
+
 int centreSensorCheck(){
   int output_lineCentre = lineCentre.read_raw();
   int calib_lineCentre = lineCentre.calibrate(output_lineCentre);
