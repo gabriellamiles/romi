@@ -2,31 +2,8 @@
 #define _PID_h
 #include <stdint.h>
 
-/*Here, the definition of the PID class begins. This is indicated by the keyword: "class"
-This is a general description of the data and functions that the class contains. 
-To use a class, we must make a specific instance of the class by declaring it into the same way we declare 
-a variable. For example, to create a version of the PID class, in our main file we might write:
-
-PID LeftWheelPID;
-PID RightWheelPID;
-
-This will create two instances of the PID class; one for the left wheel and one for the right wheel. 
-Each class will have a full copy of all the variables and functions defined for that particular class.
-*/ 
-
 class PID
 {
-  /* Public functions and variables are defined here. A public function / variable can be accessed from 
-   * outside the class. For example, once we have made an instance of the PID class, we can call the 
-   * update function by writing: 
-   * 
-   * LeftWheelPID.update();
-   * 
-   * Note that this will only update the LeftWheelPID - RightWheelPID will not be updated unless we also 
-   * call :
-   * 
-   * RightWheelPID.update()
-   */
   public:
   
     // This is the class constructor. IT is called whenever we create an instance of the PID class
@@ -56,9 +33,6 @@ class PID
     //This functions set the show_response flag
     void set_show_response(bool state); 
 
-  /* Private functions and variables are defined here. These functions / variables cannot be accessed from outside the class.
-   * For example, if we try to set the value of Kp in the file "Romi.h", we will get an error (Try it out!) 
-   */
   private:
 
     //Control gains
